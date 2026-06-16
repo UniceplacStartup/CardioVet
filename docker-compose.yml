@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cardiovet-postgres
+    environment:
+      POSTGRES_DB: cardiovet
+      POSTGRES_USER: cardiovet
+      POSTGRES_PASSWORD: cardiovet
+    ports:
+      - "5432:5432"
+    volumes:
+      - cardiovet_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardiovet -d cardiovet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cardiovet_pgdata:
