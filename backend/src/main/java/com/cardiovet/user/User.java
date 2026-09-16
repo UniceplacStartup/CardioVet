@@ -45,6 +45,18 @@ public class User implements UserDetails {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(nullable = false, length = 11)
+    private String cpf;
+
+    @Column(nullable = false, length = 11)
+    private String phone;
+
+    @Column(nullable = false, length = 20)
+    private String crmv;
+
+    @Column(length = 100)
+    private String specialty;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private Role role;
