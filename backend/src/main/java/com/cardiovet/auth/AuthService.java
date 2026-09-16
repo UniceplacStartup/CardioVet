@@ -8,6 +8,7 @@ import com.cardiovet.auth.dto.ResetPasswordRequest;
 import com.cardiovet.common.ConflictException;
 import com.cardiovet.common.Digits;
 import com.cardiovet.security.JwtService;
+import com.cardiovet.security.TokenRevocationService;
 import com.cardiovet.user.Role;
 import com.cardiovet.user.User;
 import com.cardiovet.user.UserRepository;
@@ -20,6 +21,7 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -41,6 +43,7 @@ public class AuthService {
     private final PasswordResetMailer passwordResetMailer;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final TokenRevocationService tokenRevocationService;
     private final AuthenticationManager authenticationManager;
 
     @Transactional
@@ -120,6 +123,25 @@ public class AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         token.setUsedAt(now);
+    }
+
+    public void logout(String bearerToken) {
+        if (bearerToken == null || bearerToken.isBlank()) {
+            return;
+        }
+        try {
+            UUID userId = userRepository.findByEmail(jwtService.extractUsername(bearerToken))
+                    .map(User::getId)
+                    .orElse(null);
+            if (userId != null) {
+                tokenRevocationService.revoke(
+                        jwtService.extractJti(bearerToken),
+                        userId,
+                        jwtService.extractExpiration(bearerToken));
+            }
+        } catch (RuntimeException ignored) {
+            return;
+        }
     }
 
     private AuthResponse buildResponse(User user) {

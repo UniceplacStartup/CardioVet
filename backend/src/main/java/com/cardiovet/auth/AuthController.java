@@ -10,18 +10,22 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Autenticacao", description = "Cadastro, login e redefinicao de senha")
+@Tag(name = "Autenticacao", description = "Cadastro, login, logout e redefinicao de senha")
 public class AuthController {
+
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private final AuthService authService;
 
@@ -50,5 +54,15 @@ public class AuthController {
     public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(new MessageResponse("Senha redefinida com sucesso"));
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Revoga o token atual, encerrando a sessao")
+    public ResponseEntity<Void> logout(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        if (authorization != null && authorization.startsWith(BEARER_PREFIX)) {
+            authService.logout(authorization.substring(BEARER_PREFIX.length()));
+        }
+        return ResponseEntity.noContent().build();
     }
 }
