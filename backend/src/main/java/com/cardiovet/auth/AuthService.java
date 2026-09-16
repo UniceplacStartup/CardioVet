@@ -3,6 +3,8 @@ package com.cardiovet.auth;
 import com.cardiovet.auth.dto.AuthResponse;
 import com.cardiovet.auth.dto.LoginRequest;
 import com.cardiovet.auth.dto.RegisterRequest;
+import com.cardiovet.common.ConflictException;
+import com.cardiovet.common.Digits;
 import com.cardiovet.security.JwtService;
 import com.cardiovet.user.Role;
 import com.cardiovet.user.User;
@@ -27,36 +29,58 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "E-mail ja cadastrado");
+        String email = request.email().trim().toLowerCase();
+        String cpf = Digits.only(request.cpf());
+        String crmv = request.crmv().trim().toUpperCase();
+
+        if (userRepository.existsByEmail(email)) {
+            throw new ConflictException("email", "E-mail ja cadastrado");
         }
-        User user = User.builder()
-                .name(request.name())
-                .email(request.email())
+        if (userRepository.existsByCpf(cpf)) {
+            throw new ConflictException("cpf", "CPF ja cadastrado");
+        }
+        if (userRepository.existsByCrmv(crmv)) {
+            throw new ConflictException("crmv", "CRMV ja cadastrado");
+        }
+
+        User user = userRepository.save(User.builder()
+                .name(request.name().trim())
+                .email(email)
+                .cpf(cpf)
+                .phone(Digits.only(request.phone()))
+                .crmv(crmv)
+                .specialty(trimToNull(request.specialty()))
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .role(request.role() != null ? request.role() : Role.VETERINARIO)
+                .role(Role.VETERINARIO)
                 .active(true)
-                .build();
-        user = userRepository.save(user);
+                .build());
+
         return buildResponse(user);
     }
 
     public AuthResponse login(LoginRequest request) {
+        String email = request.email().trim().toLowerCase();
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email(), request.password()));
-        User user = userRepository.findByEmail(request.email())
+                new UsernamePasswordAuthenticationToken(email, request.password()));
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciais invalidas"));
         return buildResponse(user);
     }
 
     private AuthResponse buildResponse(User user) {
-        String token = jwtService.generateToken(user);
         return new AuthResponse(
-                token,
+                jwtService.generateToken(user),
                 jwtService.getExpirationMs(),
                 user.getId(),
                 user.getName(),
                 user.getEmail(),
                 user.getRole());
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }
