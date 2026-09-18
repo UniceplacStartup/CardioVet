@@ -1,108 +1,80 @@
 <script setup lang="ts">
+import { ArrowLeft } from 'lucide-vue-next'
 import heroImg from '@/assets/auth-hero.jpg'
 import logoFull from '@/assets/logo-full.png'
-import logoMark from '@/assets/logo-mark.png'
 </script>
 
 <template>
-  <div class="flex min-h-svh items-center justify-center bg-brand-navy p-4 sm:p-8">
-    <div
-      class="auth-card flex w-full max-w-6xl overflow-hidden rounded-[10px] bg-brand-surface shadow-2xl shadow-black/40"
+  <div class="relative flex min-h-svh w-full items-center justify-center overflow-x-hidden bg-[#24354a] p-4 sm:p-8 lg:justify-end lg:pr-16 xl:pr-24">
+    <RouterLink
+      v-if="$route.name === 'register'"
+      to="/login"
+      class="absolute top-6 left-6 z-30 flex size-11 items-center justify-center rounded-full bg-brand-red text-white shadow-lg transition-transform hover:scale-105 active:scale-95 sm:top-8 sm:left-8"
+      title="Voltar para o Login"
+      aria-label="Voltar para o Login"
     >
-      <!-- Painel da foto (oculto em telas pequenas) -->
-      <div class="relative hidden flex-1 bg-white lg:block">
-        <img
-          :src="heroImg"
-          alt="Cão e gato lado a lado"
-          class="absolute inset-0 size-full object-cover object-top"
-        />
-        <img
-          :src="logoMark"
-          alt=""
-          class="absolute bottom-6 left-6 w-28 drop-shadow-sm"
-        />
-      </div>
+      <ArrowLeft class="size-6 stroke-[2.5]" />
+    </RouterLink>
 
-      <!-- Painel do formulário -->
-      <div class="flex w-full flex-col px-8 py-8 sm:px-10 lg:max-w-[420px]">
+    <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[#26374a]" aria-hidden="true">
+      <img
+        :src="heroImg"
+        alt=""
+        class="h-full w-full object-cover object-[20%_top] sm:object-[28%_top] lg:object-[32%_center] mix-blend-multiply opacity-70 brightness-[0.72] contrast-[1.08] saturate-[0.85]"
+      />
+      <div class="absolute inset-0 bg-[#162536]/40 mix-blend-multiply"></div>
+    </div>
+
+    <div
+      class="auth-card relative z-10 w-full max-w-[420px] rounded-[16px] bg-white p-7 shadow-2xl shadow-black/40 sm:p-9 max-h-[calc(100svh-4rem)] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <div class="flex justify-center pb-5 pt-1">
         <img
           :src="logoFull"
           alt="CardioVet — Laudos cardiológicos"
-          class="auth-reveal mx-auto w-64"
+          class="w-60 max-w-full select-none"
         />
-
-        <!-- Linha de batimento cardíaco -->
-        <svg
-          class="auth-reveal mx-auto mt-4 text-brand-red/70"
-          style="animation-delay: 80ms"
-          width="220"
-          height="18"
-          viewBox="0 0 220 18"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M0 9h70l8-6 8 12 8-14 8 14 6-6h112"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linejoin="round"
-          />
-        </svg>
-
-        <!-- Abas Login / Cadastrar -->
-        <nav class="auth-reveal mt-6 grid grid-cols-2 gap-2" style="animation-delay: 140ms">
-          <RouterLink
-            to="/login"
-            class="flex h-10 items-center justify-center rounded-[10px] text-sm font-semibold tracking-widest uppercase transition-colors"
-            :class="$route.name === 'login'
-              ? 'bg-brand-red text-white shadow-sm'
-              : 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15'"
-          >
-            Login
-          </RouterLink>
-          <RouterLink
-            to="/cadastro"
-            class="flex h-10 items-center justify-center rounded-[10px] text-sm font-semibold tracking-widest uppercase transition-colors"
-            :class="$route.name === 'register'
-              ? 'bg-brand-red text-white shadow-sm'
-              : 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15'"
-          >
-            Cadastrar
-          </RouterLink>
-        </nav>
-
-        <div class="auth-reveal mt-8 flex-1" style="animation-delay: 200ms">
-          <slot />
-        </div>
       </div>
+
+      <nav class="grid grid-cols-2 gap-3 pb-5">
+        <RouterLink
+          to="/login"
+          class="flex h-[41px] items-center justify-center rounded-[10px] text-sm font-semibold tracking-wider uppercase transition-colors"
+          :class="$route.name === 'login'
+            ? 'bg-brand-red text-white shadow-sm'
+            : 'bg-[#D6DBE1] text-[#4A5568] hover:bg-[#CAD0D8]'"
+        >
+          Login
+        </RouterLink>
+        <RouterLink
+          to="/cadastro"
+          class="flex h-[41px] items-center justify-center rounded-[10px] text-sm font-semibold tracking-wider uppercase transition-colors"
+          :class="$route.name === 'register'
+            ? 'bg-brand-red text-white shadow-sm'
+            : 'bg-[#D6DBE1] text-[#4A5568] hover:bg-[#CAD0D8]'"
+        >
+          Cadastrar
+        </RouterLink>
+      </nav>
+
+      <slot />
     </div>
+
+    <footer class="pointer-events-none absolute inset-x-0 bottom-3 z-10 text-center text-xs font-normal tracking-wide text-white/80 select-none drop-shadow-sm">
+      © 2026 CardioVet. Todos os direitos reservados.
+    </footer>
   </div>
 </template>
 
 <style scoped>
 .auth-card {
-  animation: auth-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.auth-reveal {
-  animation: auth-reveal-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: auth-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes auth-card-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes auth-reveal-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -111,8 +83,7 @@ import logoMark from '@/assets/logo-mark.png'
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-card,
-  .auth-reveal {
+  .auth-card {
     animation: none;
   }
 }

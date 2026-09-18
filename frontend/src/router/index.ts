@@ -22,18 +22,36 @@ const router = createRouter({
       children: [
         {
           path: '',
-          name: 'dashboard',
-          component: () => import('@/views/DashboardView.vue'),
+          redirect: '/pacientes',
         },
         {
-          path: 'patients',
+          path: 'pacientes',
           name: 'patients',
           component: () => import('@/views/PatientsView.vue'),
         },
         {
+          path: 'upload',
+          name: 'upload',
+          component: () => import('@/views/UploadView.vue'),
+        },
+        {
+          path: 'laudos',
+          name: 'reports',
+          component: () => import('@/views/ReportsView.vue'),
+        },
+        {
+          path: 'perfil',
+          name: 'profile',
+          component: () => import('@/views/ProfileView.vue'),
+        },
+        // Compatibilidade retroativa
+        {
+          path: 'patients',
+          redirect: '/pacientes',
+        },
+        {
           path: 'documents',
-          name: 'documents',
-          component: () => import('@/views/DocumentsView.vue'),
+          redirect: '/laudos',
         },
       ],
     },
@@ -46,7 +64,7 @@ router.beforeEach((to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
-    return { name: 'dashboard' }
+    return { name: 'patients' }
   }
   return true
 })

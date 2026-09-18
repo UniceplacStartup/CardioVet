@@ -4,10 +4,7 @@ import { useRouter } from 'vue-router'
 import { Loader2 } from 'lucide-vue-next'
 import axios from 'axios'
 import AuthShell from '@/components/auth/AuthShell.vue'
-import PasswordInput from '@/components/auth/PasswordInput.vue'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -47,23 +44,6 @@ function isValidCpf(value: string): boolean {
 const cpfInvalid = computed(
   () => cpf.value.replace(/\D/g, '').length === 11 && !isValidCpf(cpf.value),
 )
-
-const passwordStrength = computed(() => {
-  const p = password.value
-  if (!p) return 0
-  let score = 0
-  if (p.length >= 8) score++
-  if (p.length >= 10 && /[a-z]/.test(p) && /[A-Z]/.test(p)) score++
-  if (/\d/.test(p) && /[^A-Za-z0-9]/.test(p)) score++
-  return score
-})
-
-const strengthMeta = [
-  { label: '', color: '' },
-  { label: 'Senha fraca', color: 'bg-brand-red' },
-  { label: 'Senha média', color: 'bg-amber-500' },
-  { label: 'Senha forte', color: 'bg-emerald-600' },
-] as const
 
 function maskCpf(value: string) {
   cpf.value = value
@@ -125,164 +105,204 @@ async function onSubmit() {
     loading.value = false
   }
 }
+const showPassword = ref(false)
 </script>
 
 <template>
   <AuthShell>
-    <form class="flex h-full flex-col gap-4" @submit.prevent="onSubmit">
-      <!-- Dados de acesso -->
-      <p class="border-b border-brand-navy/10 pb-1.5 text-[11px] font-semibold tracking-widest text-brand-navy/50 uppercase">
-        Dados de acesso
-      </p>
-
-      <div class="space-y-1.5">
-        <Label for="email">E-mail</Label>
-        <Input
+    <form class="flex flex-col gap-2.5" @submit.prevent="onSubmit">
+      <!-- E-MAIL * -->
+      <div class="space-y-1">
+        <label for="email" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+          E-MAIL <span class="text-brand-red">*</span>
+        </label>
+        <input
           id="email"
           v-model="email"
           type="email"
-          placeholder="seu@email.com"
+          placeholder="SEU@EMAIL.COM"
           autocomplete="email"
           autofocus
           required
+          class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] placeholder:uppercase outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
         />
       </div>
 
-      <div class="space-y-1.5">
-        <Label for="email-confirm">Repita seu e-mail</Label>
-        <Input
+      <!-- CONFIRME SEU E-MAIL * -->
+      <div class="space-y-1">
+        <label for="email-confirm" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+          CONFIRME SEU E-MAIL <span class="text-brand-red">*</span>
+        </label>
+        <input
           id="email-confirm"
           v-model="emailConfirm"
           type="email"
-          placeholder="seu@email.com"
+          placeholder="SEU@EMAIL.COM"
           autocomplete="email"
-          :aria-invalid="emailMismatch || undefined"
           required
+          class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] placeholder:uppercase outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
         />
-        <p v-if="emailMismatch" class="text-xs text-destructive">Os e-mails não coincidem.</p>
+        <p v-if="emailMismatch" class="text-[10px] font-medium text-destructive">Os e-mails não coincidem.</p>
       </div>
 
-      <!-- Dados pessoais e profissionais -->
-      <p class="mt-2 border-b border-brand-navy/10 pb-1.5 text-[11px] font-semibold tracking-widest text-brand-navy/50 uppercase">
-        Dados do veterinário
-      </p>
-
-      <div class="space-y-1.5">
-        <Label for="name">Nome completo</Label>
-        <Input
+      <!-- NOME * -->
+      <div class="space-y-1">
+        <label for="name" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+          NOME <span class="text-brand-red">*</span>
+        </label>
+        <input
           id="name"
           v-model="name"
-          placeholder="Digite seu nome completo"
+          type="text"
+          placeholder="DIGITE SEU NOME COMPLETO"
           autocomplete="name"
           maxlength="150"
           required
+          class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] placeholder:uppercase outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
         />
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="space-y-1.5">
-          <Label for="cpf">CPF <span class="font-normal text-brand-navy/40 normal-case">(opcional)</span></Label>
-          <Input
+      <!-- CPF * & TELEFONE * -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="space-y-1">
+          <label for="cpf" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+            CPF <span class="text-brand-red">*</span>
+          </label>
+          <input
             id="cpf"
-            :model-value="cpf"
+            :value="cpf"
             inputmode="numeric"
             placeholder="000.000.000-00"
-            :aria-invalid="cpfInvalid || undefined"
-            @update:model-value="maskCpf(String($event))"
+            required
+            class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
+            @input="maskCpf(($event.target as HTMLInputElement).value)"
           />
-          <p v-if="cpfInvalid" class="text-xs text-destructive">CPF inválido.</p>
+          <p v-if="cpfInvalid" class="text-[10px] font-medium text-destructive">CPF inválido.</p>
         </div>
-        <div class="space-y-1.5">
-          <Label for="phone">Telefone</Label>
-          <Input
+        <div class="space-y-1">
+          <label for="phone" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+            TELEFONE <span class="text-brand-red">*</span>
+          </label>
+          <input
             id="phone"
-            :model-value="phone"
+            :value="phone"
             inputmode="numeric"
-            placeholder="(00) 90000-0000"
+            placeholder="(00) 00000-0000"
             autocomplete="tel-national"
-            @update:model-value="maskPhone(String($event))"
+            required
+            class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
+            @input="maskPhone(($event.target as HTMLInputElement).value)"
           />
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="space-y-1.5">
-          <Label for="crmv">CRMV</Label>
-          <Input id="crmv" v-model="crmv" placeholder="CRMV-UF 00000" />
+      <!-- CRMV * & ESPECIALIDADE * -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="space-y-1">
+          <label for="crmv" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+            CRMV <span class="text-brand-red">*</span>
+          </label>
+          <input
+            id="crmv"
+            v-model="crmv"
+            type="text"
+            placeholder="CRMV-UF 00000"
+            required
+            class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] placeholder:uppercase outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
+          />
         </div>
-        <div class="space-y-1.5">
-          <Label for="specialty">Especialidade</Label>
-          <Input id="specialty" v-model="specialty" placeholder="Cardiologia" />
+        <div class="space-y-1">
+          <label for="specialty" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+            ESPECIALIDADE <span class="text-brand-red">*</span>
+          </label>
+          <input
+            id="specialty"
+            v-model="specialty"
+            type="text"
+            placeholder="CARDIOLOGIA"
+            required
+            class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] placeholder:uppercase outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
+          />
         </div>
       </div>
 
-      <!-- Senha -->
-      <p class="mt-2 border-b border-brand-navy/10 pb-1.5 text-[11px] font-semibold tracking-widest text-brand-navy/50 uppercase">
-        Senha
-      </p>
-
-      <div class="space-y-1.5">
-        <Label for="password">Senha</Label>
-        <PasswordInput
+      <!-- SENHA * -->
+      <div class="space-y-1">
+        <label for="password" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+          SENHA <span class="text-brand-red">*</span>
+        </label>
+        <input
           id="password"
           v-model="password"
-          placeholder="Mínimo de 8 caracteres"
+          :type="showPassword ? 'text' : 'password'"
+          placeholder="••••••••••••••••"
           autocomplete="new-password"
-          minlength="8"
           required
+          class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
         />
-        <div v-if="password" class="flex items-center gap-2 pt-1" aria-live="polite">
-          <div class="flex flex-1 gap-1">
-            <span
-              v-for="i in 3"
-              :key="i"
-              class="h-1 flex-1 rounded-full transition-colors"
-              :class="i <= passwordStrength ? strengthMeta[passwordStrength].color : 'bg-brand-navy/10'"
-            />
-          </div>
-          <span class="text-[11px] font-medium text-brand-navy/60">
-            {{ strengthMeta[passwordStrength].label }}
-          </span>
-        </div>
       </div>
 
-      <div class="space-y-1.5">
-        <Label for="password-confirm">Repetir senha</Label>
-        <PasswordInput
+      <!-- REPETIR SENHA * -->
+      <div class="space-y-1">
+        <label for="password-confirm" class="block text-[11px] font-semibold tracking-wide text-brand-navy uppercase select-none">
+          REPETIR SENHA <span class="text-brand-red">*</span>
+        </label>
+        <input
           id="password-confirm"
           v-model="passwordConfirm"
-          placeholder="Repita a senha"
+          :type="showPassword ? 'text' : 'password'"
+          placeholder="••••••••••••••••"
           autocomplete="new-password"
-          :aria-invalid="passwordMismatch || undefined"
           required
+          class="h-[36px] w-full rounded-[10px] bg-[#D6DBE1] px-3.5 text-xs font-medium text-brand-navy placeholder:text-[#8D98A7] outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
         />
-        <p v-if="passwordMismatch" class="text-xs text-destructive">As senhas não coincidem.</p>
+        <p v-if="passwordMismatch" class="text-[10px] font-medium text-destructive">As senhas não coincidem.</p>
       </div>
 
+      <!-- MOSTRAR SENHA & AVISO -->
+      <div class="flex items-center justify-between pt-0.5 text-[10px] select-none">
+        <label class="flex cursor-pointer items-center gap-1.5 text-brand-navy/80 hover:text-brand-navy">
+          <input
+            v-model="showPassword"
+            type="checkbox"
+            class="size-3.5 rounded border-gray-300 text-brand-red accent-brand-red cursor-pointer"
+          />
+          <span class="font-semibold uppercase tracking-wider text-[9px]">MOSTRAR SENHA</span>
+        </label>
+
+        <span class="text-[8px] font-semibold uppercase tracking-wider text-brand-navy/60">
+          <span class="text-brand-red">*</span> ESPAÇOS COM PREENCHIMENTO OBRIGATÓRIO
+        </span>
+      </div>
+
+      <!-- Regras de validação de senha -->
+      <div class="rounded-[8px] bg-[#DDE2E8] p-2.5 text-[9.5px] leading-relaxed text-[#4A5568] select-none">
+        <p>A senha deve ter no mínimo 8 caracteres.</p>
+        <p>A senha deve conter pelo menos 1 letra maiúscula (A–Z).</p>
+        <p>A senha deve conter pelo menos 1 letra minúscula (a–z).</p>
+        <p>A senha deve conter pelo menos 1 número (0–9).</p>
+        <p>A senha deve conter pelo menos 1 caractere especial (ex: @, #, $, %, &, *).</p>
+      </div>
+
+      <!-- Erro geral -->
       <p
         v-if="error"
         role="alert"
-        class="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        class="rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive"
       >
         {{ error }}
       </p>
 
-      <div class="mt-auto pt-4 text-center">
+      <!-- Botão CADASTRAR -->
+      <div class="pt-2">
         <Button
           type="submit"
-          size="lg"
-          class="w-full max-w-[250px] tracking-widest uppercase"
+          class="h-[41px] w-full rounded-[10px] bg-brand-red text-sm font-bold tracking-widest text-white uppercase shadow-sm transition-all hover:bg-[#8F1818] active:scale-[0.99] disabled:opacity-70"
           :disabled="loading"
         >
-          <Loader2 v-if="loading" class="animate-spin" />
-          {{ loading ? 'Cadastrando...' : 'Cadastrar' }}
+          <Loader2 v-if="loading" class="size-4 animate-spin" />
+          {{ loading ? 'CADASTRANDO...' : 'CADASTRAR' }}
         </Button>
-        <p class="mt-3 text-[11px] leading-relaxed text-brand-navy/50">
-          Já tem uma conta?
-          <RouterLink to="/login" class="font-semibold text-brand-red underline-offset-4 hover:underline">
-            Faça login
-          </RouterLink>
-        </p>
       </div>
     </form>
   </AuthShell>
