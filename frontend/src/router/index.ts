@@ -36,8 +36,8 @@ const router = createRouter({
         },
         {
           path: 'laudos',
-          name: 'laudos',
-          component: () => import('@/views/LaudosView.vue'),
+          name: 'reports',
+          component: () => import('@/views/ReportsView.vue'),
         },
         {
           path: 'perfil',
