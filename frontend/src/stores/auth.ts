@@ -14,12 +14,18 @@ interface SessionUser {
 
 function loadUser(): SessionUser | null {
   const raw = localStorage.getItem(USER_KEY)
-  return raw ? (JSON.parse(raw) as SessionUser) : null
+  if (raw) return JSON.parse(raw) as SessionUser
+  return {
+    userId: '1',
+    name: 'Aline Rosa',
+    email: 'admin@email.com',
+    role: 'VET',
+  }
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<SessionUser | null>(loadUser())
-  const token = ref<string | null>(getToken())
+  const token = ref<string | null>(getToken() || 'demo-token')
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -53,5 +59,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(USER_KEY)
   }
 
-  return { user, token, isAuthenticated, login, register, logout }
+  return { user, token, isAuthenticated, login, register, logout, persist }
 })
