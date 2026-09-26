@@ -125,12 +125,12 @@ async function onSubmit() {
 
       <!-- Link ESQUECEU SUA SENHA? -->
       <div class="pt-3 text-center">
-        <a
-          href="#"
+        <RouterLink
+          to="/esqueci-minha-senha"
           class="text-[11px] font-semibold tracking-wider text-[#4A5568] uppercase transition-colors hover:text-brand-red underline-offset-4 hover:underline select-none"
         >
           ESQUECEU SUA SENHA?
-        </a>
+        </RouterLink>
       </div>
     </form>
   </AuthShell>

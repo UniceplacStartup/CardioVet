@@ -17,6 +17,16 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/esqueci-minha-senha',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/recuperar-senha',
+      redirect: '/esqueci-minha-senha',
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
@@ -32,6 +42,11 @@ const router = createRouter({
         {
           path: 'upload',
           name: 'upload',
+          component: () => import('@/views/UploadView.vue'),
+        },
+        {
+          path: 'editar-laudo',
+          name: 'edit-report',
           component: () => import('@/views/UploadView.vue'),
         },
         {
@@ -63,7 +78,10 @@ router.beforeEach((to) => {
   if (!to.meta.public && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
+  if (
+    (to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') &&
+    auth.isAuthenticated
+  ) {
     return { name: 'patients' }
   }
   return true
