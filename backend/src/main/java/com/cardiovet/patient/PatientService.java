@@ -22,7 +22,7 @@ public class PatientService {
     public Page<PatientResponse> list(String search, Pageable pageable) {
         Page<Patient> page = (search == null || search.isBlank())
                 ? patientRepository.findAll(pageable)
-                : patientRepository.findByNameContainingIgnoreCase(search, pageable);
+                : patientRepository.findByNameContainingIgnoreCaseOrTutorNameContainingIgnoreCase(search, search, pageable);
         return page.map(PatientResponse::from);
     }
 

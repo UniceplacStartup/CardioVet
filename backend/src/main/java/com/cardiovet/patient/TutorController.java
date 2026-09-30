@@ -1,7 +1,7 @@
 package com.cardiovet.patient;
 
-import com.cardiovet.patient.dto.PatientRequest;
-import com.cardiovet.patient.dto.PatientResponse;
+import com.cardiovet.patient.dto.TutorRequest;
+import com.cardiovet.patient.dto.TutorResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -11,7 +11,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,39 +21,33 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/patients")
+@RequestMapping("/api/tutors")
 @RequiredArgsConstructor
-@Tag(name = "Pacientes", description = "Gestao de pacientes (animais) e seus tutores")
-public class PatientController {
+@Tag(name = "Tutores", description = "Responsaveis pelos pacientes")
+public class TutorController {
 
-    private final PatientService patientService;
+    private final TutorService tutorService;
 
     @GetMapping
-    public Page<PatientResponse> list(
+    public Page<TutorResponse> list(
             @RequestParam(required = false) String search,
             @PageableDefault(size = 20, sort = "name") Pageable pageable) {
-        return patientService.list(search, pageable);
+        return tutorService.list(search, pageable);
     }
 
     @GetMapping("/{id}")
-    public PatientResponse get(@PathVariable UUID id) {
-        return patientService.get(id);
+    public TutorResponse get(@PathVariable UUID id) {
+        return tutorService.get(id);
     }
 
     @PostMapping
-    public ResponseEntity<PatientResponse> create(@Valid @RequestBody PatientRequest request) {
-        PatientResponse created = patientService.create(request);
-        return ResponseEntity.created(URI.create("/api/patients/" + created.id())).body(created);
+    public ResponseEntity<TutorResponse> create(@Valid @RequestBody TutorRequest request) {
+        TutorResponse created = tutorService.create(request);
+        return ResponseEntity.created(URI.create("/api/tutors/" + created.id())).body(created);
     }
 
     @PutMapping("/{id}")
-    public PatientResponse update(@PathVariable UUID id, @Valid @RequestBody PatientRequest request) {
-        return patientService.update(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        patientService.delete(id);
-        return ResponseEntity.noContent().build();
+    public TutorResponse update(@PathVariable UUID id, @Valid @RequestBody TutorRequest request) {
+        return tutorService.update(id, request);
     }
 }
