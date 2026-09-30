@@ -7,6 +7,7 @@ import com.cardiovet.security.JwtService;
 import com.cardiovet.user.Role;
 import com.cardiovet.user.User;
 import com.cardiovet.user.UserRepository;
+import com.cardiovet.user.dto.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -26,25 +27,30 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+    public UserProfileResponse register(RegisterRequest request) {
+        String email = request.email().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "E-mail ja cadastrado");
         }
         User user = User.builder()
                 .name(request.name())
-                .email(request.email())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .role(request.role() != null ? request.role() : Role.VETERINARIO)
+                .cpf(blankToNull(request.cpf()))
+                .phone(blankToNull(request.phone()))
+                .crmv(blankToNull(request.crmv()))
+                .specialty(blankToNull(request.specialty()))
+                .role(Role.VETERINARIO)
                 .active(true)
                 .build();
-        user = userRepository.save(user);
-        return buildResponse(user);
+        return UserProfileResponse.from(userRepository.save(user));
     }
 
     public AuthResponse login(LoginRequest request) {
+        String email = request.email().trim().toLowerCase();
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email(), request.password()));
-        User user = userRepository.findByEmail(request.email())
+                new UsernamePasswordAuthenticationToken(email, request.password()));
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciais invalidas"));
         return buildResponse(user);
     }
@@ -58,5 +64,9 @@ public class AuthService {
                 user.getName(),
                 user.getEmail(),
                 user.getRole());
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }
