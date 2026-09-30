@@ -2,12 +2,13 @@ package com.cardiovet.document.dto;
 
 import com.cardiovet.document.Document;
 import com.cardiovet.document.DocumentStatus;
+import com.cardiovet.patient.Patient;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** Detalhe de um documento incluindo os campos extraidos e o texto bruto. */
 public record DocumentDetailResponse(
         UUID id,
         String fileName,
@@ -18,13 +19,28 @@ public record DocumentDetailResponse(
         String errorMessage,
         UUID patientId,
         String patientName,
+        String species,
+        String breed,
+        String sex,
+        BigDecimal weightKg,
+        UUID tutorId,
+        String tutorName,
+        String tutorCpf,
+        String reportModel,
+        LocalDate examDate,
+        String patientAge,
+        String veterinarianName,
+        String findings,
+        String conclusion,
         UUID uploadedById,
         String uploadedByName,
         String extractedText,
         List<DocumentFieldResponse> fields,
+        List<DocumentImageResponse> images,
         OffsetDateTime createdAt) {
 
-    public static DocumentDetailResponse from(Document d) {
+    public static DocumentDetailResponse from(Document d, List<DocumentImageResponse> images) {
+        Patient p = d.getPatient();
         return new DocumentDetailResponse(
                 d.getId(),
                 d.getFileName(),
@@ -33,12 +49,26 @@ public record DocumentDetailResponse(
                 d.getDocumentDate(),
                 d.getStatus(),
                 d.getErrorMessage(),
-                d.getPatient() != null ? d.getPatient().getId() : null,
-                d.getPatient() != null ? d.getPatient().getName() : null,
+                p != null ? p.getId() : null,
+                p != null ? p.getName() : null,
+                p != null ? p.getSpecies() : null,
+                p != null ? p.getBreed() : null,
+                p != null ? p.getSex() : null,
+                p != null ? p.getWeightKg() : null,
+                p != null ? p.getTutor().getId() : null,
+                p != null ? p.getTutor().getName() : null,
+                p != null ? p.getTutor().getDocument() : null,
+                d.getReportModel(),
+                d.getExamDate(),
+                d.getPatientAge(),
+                d.getVeterinarianName(),
+                d.getFindings(),
+                d.getConclusion(),
                 d.getUploadedBy().getId(),
                 d.getUploadedBy().getName(),
                 d.getExtractedText(),
                 d.getFields().stream().map(DocumentFieldResponse::from).toList(),
+                images,
                 d.getCreatedAt());
     }
 }

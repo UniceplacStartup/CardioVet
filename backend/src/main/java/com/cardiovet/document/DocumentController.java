@@ -1,18 +1,23 @@
 package com.cardiovet.document;
 
 import com.cardiovet.document.dto.DocumentDetailResponse;
+import com.cardiovet.document.dto.DocumentImageResponse;
 import com.cardiovet.document.dto.DocumentResponse;
+import com.cardiovet.document.dto.ReportRequest;
 import com.cardiovet.user.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
@@ -24,6 +29,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,7 +60,7 @@ public class DocumentController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) UUID patientId,
-            @PageableDefault(size = 20, sort = "documentDate") Pageable pageable) {
+            @PageableDefault(size = 20, sort = {"documentDate", "createdAt"}, direction = Sort.Direction.DESC) Pageable pageable) {
         return documentService.list(from, to, patientId, pageable);
     }
 
@@ -81,6 +88,41 @@ public class DocumentController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         documentService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Salva os dados editados do laudo e vincula paciente/tutor")
+    @PutMapping("/{id}/report")
+    public DocumentDetailResponse updateReport(@PathVariable UUID id, @Valid @RequestBody ReportRequest request) {
+        return documentService.updateReport(id, request);
+    }
+
+    @Operation(summary = "Anexa imagens do exame ao laudo")
+    @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<DocumentImageResponse> addImages(
+            @PathVariable UUID id,
+            @RequestParam("files") List<MultipartFile> files) {
+        return documentService.addImages(id, files);
+    }
+
+    @Operation(summary = "Retorna o conteudo de uma imagem anexada")
+    @GetMapping("/{id}/images/{imageId}")
+    public ResponseEntity<Resource> getImage(@PathVariable UUID id, @PathVariable UUID imageId) {
+        DocumentImage image = documentService.getImage(id, imageId);
+        ContentDisposition disposition = ContentDisposition.inline().filename(image.getFileName()).build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "sandbox")
+                .contentType(MediaType.parseMediaType(image.getContentType()))
+                .contentLength(image.getFileSizeBytes())
+                .body(new ByteArrayResource(image.getContent()));
+    }
+
+    @Operation(summary = "Remove uma imagem anexada")
+    @DeleteMapping("/{id}/images/{imageId}")
+    public ResponseEntity<Void> deleteImage(@PathVariable UUID id, @PathVariable UUID imageId) {
+        documentService.deleteImage(id, imageId);
         return ResponseEntity.noContent().build();
     }
 }

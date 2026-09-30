@@ -90,6 +90,24 @@ public class Document {
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 
+    @Column(name = "report_model", length = 100)
+    private String reportModel;
+
+    @Column(name = "exam_date")
+    private LocalDate examDate;
+
+    @Column(name = "patient_age", length = 40)
+    private String patientAge;
+
+    @Column(name = "veterinarian_name", length = 150)
+    private String veterinarianName;
+
+    @Column(columnDefinition = "text")
+    private String findings;
+
+    @Column(columnDefinition = "text")
+    private String conclusion;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
