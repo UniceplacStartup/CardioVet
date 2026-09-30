@@ -49,6 +49,18 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 30)
     private Role role;
 
+    @Column(length = 14)
+    private String cpf;
+
+    @Column(length = 20)
+    private String phone;
+
+    @Column(length = 30)
+    private String crmv;
+
+    @Column(length = 100)
+    private String specialty;
+
     @Column(nullable = false)
     private boolean active;
 
