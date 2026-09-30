@@ -1,37 +1,42 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Loader2 } from 'lucide-vue-next'
-import axios from 'axios'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Info, Loader2 } from 'lucide-vue-next'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import { Button } from '@/components/ui/button'
-import api from '@/lib/api'
+import api, { apiErrorMessage } from '@/lib/api'
+import { formatCpf, isValidCpf } from '@/lib/cpf'
+
+const router = useRouter()
 
 const email = ref('')
+const cpf = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
-const success = ref(false)
+
+const cpfInvalid = computed(
+  () => cpf.value.replace(/\D/g, '').length === 11 && !isValidCpf(cpf.value),
+)
+
+function maskCpf(value: string) {
+  cpf.value = formatCpf(value)
+}
 
 async function onSubmit() {
   error.value = null
-  success.value = false
+  if (!isValidCpf(cpf.value)) {
+    error.value = 'Informe um CPF válido.'
+    return
+  }
   loading.value = true
-
   try {
-    await api.post('/auth/forgot-password', {
+    const { data } = await api.post<{ token: string }>('/auth/verify-identity', {
       email: email.value.trim().toLowerCase(),
+      cpf: cpf.value,
     })
-    success.value = true
+    router.push({ name: 'reset-password', query: { token: data.token } })
   } catch (err: unknown) {
-    if (axios.isAxiosError(err)) {
-      if (err.response?.status === 404 || err.response?.status === 501 || !err.response) {
-        success.value = true
-      } else {
-        const message = (err.response?.data as { message?: string } | undefined)?.message
-        error.value = message || 'Não foi possível enviar o link de recuperação. Tente novamente mais tarde.'
-      }
-    } else {
-      success.value = true
-    }
+    error.value = apiErrorMessage(err, 'Não foi possível verificar seus dados. Tente novamente.')
   } finally {
     loading.value = false
   }
@@ -39,16 +44,24 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthShell :show-nav="false">
+  <AuthShell>
     <div class="space-y-4">
       <header class="space-y-1">
         <h1 class="text-base font-bold tracking-tight text-brand-navy">
           Esqueceu sua senha?
         </h1>
         <p class="text-xs leading-relaxed text-[#5B6B82]">
-          Informe seu e-mail cadastrado para receber o link de redefinição de senha.
+          Informe o e-mail e o CPF cadastrados para definir uma nova senha.
         </p>
       </header>
+
+      <div
+        role="note"
+        class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs font-medium text-amber-900"
+      >
+        <Info class="mt-0.5 size-4 shrink-0" />
+        <span>O envio do link de redefinição por e-mail está em desenvolvimento.</span>
+      </div>
 
       <form class="flex flex-col gap-3.5" @submit.prevent="onSubmit">
         <div class="space-y-1.5">
@@ -70,6 +83,27 @@ async function onSubmit() {
           />
         </div>
 
+        <div class="space-y-1.5">
+          <label
+            for="cpf"
+            class="block text-[13px] font-semibold tracking-wide text-brand-navy uppercase select-none"
+          >
+            CPF <span class="text-brand-red">*</span>
+          </label>
+          <input
+            id="cpf"
+            :value="cpf"
+            type="text"
+            inputmode="numeric"
+            placeholder="000.000.000-00"
+            autocomplete="off"
+            required
+            class="h-[41px] w-full rounded-[10px] bg-[#D6DBE1] px-4 text-sm font-medium text-brand-navy placeholder:text-[#8D98A7] outline-none transition-all focus:bg-[#E2E6EC] focus:ring-1 focus:ring-brand-red/50"
+            @input="maskCpf(($event.target as HTMLInputElement).value)"
+          />
+          <p v-if="cpfInvalid" class="text-[10px] font-medium text-destructive">CPF inválido.</p>
+        </div>
+
         <p class="text-[9px] font-semibold tracking-wider text-brand-navy/60 uppercase select-none">
           <span class="text-brand-red">*</span> ESPAÇOS COM PREENCHIMENTO OBRIGATÓRIO
         </p>
@@ -82,14 +116,6 @@ async function onSubmit() {
           {{ error }}
         </p>
 
-        <div
-          v-if="success"
-          role="status"
-          class="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-medium text-emerald-800"
-        >
-          Se o e-mail informado estiver cadastrado, você receberá um link com as instruções para redefinição de senha em instantes.
-        </div>
-
         <div class="pt-2">
           <Button
             type="submit"
@@ -97,7 +123,7 @@ async function onSubmit() {
             :disabled="loading"
           >
             <Loader2 v-if="loading" class="size-4 animate-spin" />
-            {{ loading ? 'ENVIANDO...' : 'ENVIAR LINK' }}
+            {{ loading ? 'VERIFICANDO...' : 'CONTINUAR' }}
           </Button>
         </div>
 

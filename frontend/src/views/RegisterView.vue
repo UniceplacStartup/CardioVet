@@ -6,6 +6,7 @@ import axios from 'axios'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
+import { formatCpf, isValidCpf } from '@/lib/cpf'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -29,29 +30,13 @@ const passwordMismatch = computed(
   () => passwordConfirm.value.length > 0 && password.value !== passwordConfirm.value,
 )
 
-function isValidCpf(value: string): boolean {
-  const d = value.replace(/\D/g, '')
-  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
-  for (const len of [9, 10]) {
-    let sum = 0
-    for (let i = 0; i < len; i++) sum += Number(d[i]) * (len + 1 - i)
-    if (((sum * 10) % 11) % 10 !== Number(d[len])) return false
-  }
-  return true
-}
-
 // Só acusa erro quando o CPF está completo, para não punir durante a digitação.
 const cpfInvalid = computed(
   () => cpf.value.replace(/\D/g, '').length === 11 && !isValidCpf(cpf.value),
 )
 
 function maskCpf(value: string) {
-  cpf.value = value
-    .replace(/\D/g, '')
-    .slice(0, 11)
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2')
+  cpf.value = formatCpf(value)
 }
 
 function maskPhone(value: string) {
@@ -88,11 +73,15 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.register({
-      name: name.value,
-      email: email.value,
+      name: name.value.trim(),
+      email: email.value.trim(),
       password: password.value,
+      cpf: cpf.value || undefined,
+      phone: phone.value || undefined,
+      crmv: crmv.value.trim() || undefined,
+      specialty: specialty.value.trim() || undefined,
     })
-    router.push('/')
+    router.push({ name: 'login', query: { registered: '1', email: email.value.trim() } })
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.status === 409) {
       error.value = 'Já existe uma conta com este e-mail.'

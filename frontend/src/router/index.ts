@@ -23,6 +23,12 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/redefinir-senha',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/recuperar-senha',
       redirect: '/esqueci-minha-senha',
     },
@@ -45,9 +51,10 @@ const router = createRouter({
           component: () => import('@/views/UploadView.vue'),
         },
         {
-          path: 'editar-laudo',
+          path: 'editar-laudo/:id',
           name: 'edit-report',
           component: () => import('@/views/UploadView.vue'),
+          props: true,
         },
         {
           path: 'laudos',
@@ -59,7 +66,6 @@ const router = createRouter({
           name: 'profile',
           component: () => import('@/views/ProfileView.vue'),
         },
-        // Compatibilidade retroativa
         {
           path: 'patients',
           redirect: '/pacientes',
@@ -75,12 +81,16 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
-  if (!to.meta.public && !auth.isAuthenticated) {
+  const authenticated = auth.isSessionValid()
+  if (!to.meta.public && !authenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (
-    (to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') &&
-    auth.isAuthenticated
+    (to.name === 'login' ||
+      to.name === 'register' ||
+      to.name === 'forgot-password' ||
+      to.name === 'reset-password') &&
+    authenticated
   ) {
     return { name: 'patients' }
   }

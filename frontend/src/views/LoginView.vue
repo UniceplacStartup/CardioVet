@@ -11,7 +11,14 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-const email = ref('')
+const email = ref((route.query.email as string | undefined) ?? '')
+const notice = ref<string | null>(
+  route.query.registered
+    ? 'Cadastro realizado com sucesso! Entre com seu e-mail e senha.'
+    : route.query.expired
+      ? 'Sua sessão expirou. Entre novamente para continuar.'
+      : null,
+)
 const password = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
@@ -19,6 +26,7 @@ const error = ref<string | null>(null)
 
 async function onSubmit() {
   error.value = null
+  notice.value = null
   loading.value = true
   try {
     await auth.login({ email: email.value, password: password.value })
@@ -27,16 +35,11 @@ async function onSubmit() {
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.status === 401) {
       error.value = 'E-mail ou senha inválidos.'
+    } else if (axios.isAxiosError(e) && !e.response) {
+      error.value = 'Não foi possível conectar ao servidor.'
     } else {
-      auth.persist({
-        token: 'demo-token',
-        userId: '1',
-        name: 'Dra. Aline Rosa',
-        email: email.value || 'admin@email.com',
-        role: 'VET',
-      })
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+      auth.logout()
+      error.value = 'Não foi possível entrar. Tente novamente.'
     }
   } finally {
     loading.value = false
@@ -103,6 +106,14 @@ async function onSubmit() {
       </div>
 
       <!-- Mensagem de erro amigável -->
+      <p
+        v-if="notice"
+        role="status"
+        class="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-800"
+      >
+        {{ notice }}
+      </p>
+
       <p
         v-if="error"
         role="alert"
