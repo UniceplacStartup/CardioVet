@@ -27,6 +27,16 @@ npm install
 npm run dev                   # http://localhost:5173
 ```
 
+Se o backend rodar em outra porta (`SERVER_PORT=8091 ./mvnw spring-boot:run`),
+aponte o proxy do Vite para ela: `API_TARGET=http://localhost:8091 npm run dev`.
+
+**Recuperação de senha:** a tela "Esqueci a senha" pede e-mail + CPF cadastrados;
+se conferirem, abre direto a tela de nova senha (token de uso único, 30 min).
+O envio do link por e-mail (`/auth/forgot-password`) ainda não tem SMTP — para
+depurar, `PASSWORD_RESET_LOG_LINK=true` imprime o link no log (nunca em produção). A base do link vem
+de `FRONTEND_URL` (padrão `http://localhost:5173`) e a validade de
+`PASSWORD_RESET_TTL_MINUTES` (padrão 30).
+
 ## Funcionalidade de extração de PDF
 
 1. Em **Documentos**, envie um PDF de laudo.
