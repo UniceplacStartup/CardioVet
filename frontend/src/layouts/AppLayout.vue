@@ -58,19 +58,19 @@ function handleLogout() {
         <div class="flex items-center gap-2.5 rounded-xl border border-slate-300/80 bg-white p-2.5 shadow-xs">
           <img
             :src="perfImg"
-            alt="Dra. Aline Rosa"
+            :alt="auth.user?.name ?? ''"
             class="size-9 rounded-full object-cover shrink-0 ring-1 ring-slate-200"
           />
           <div class="min-w-0 flex-1 text-left">
             <p class="truncate text-[10.5px] font-bold leading-tight text-slate-800">
-              Clínica Veterinária José da Silva
+              Med. Vet. {{ auth.user?.name }}
             </p>
-            <p class="truncate text-[9.5px] font-medium text-slate-500">
-              Med. Vet. {{ auth.user?.name || 'Aline Rosa' }}
+            <p v-if="auth.user?.specialty" class="truncate text-[9.5px] font-medium text-slate-500">
+              {{ auth.user.specialty }}
             </p>
             <div class="flex items-center justify-between text-[8.5px] text-slate-400">
-              <span class="truncate">{{ auth.user?.email || 'admin@email.com' }}</span>
-              <span class="shrink-0 pl-1 font-medium">CRMV - XXXX</span>
+              <span class="truncate">{{ auth.user?.email }}</span>
+              <span v-if="auth.user?.crmv" class="shrink-0 pl-1 font-medium">{{ auth.user.crmv }}</span>
             </div>
           </div>
         </div>

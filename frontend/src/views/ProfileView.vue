@@ -1,58 +1,130 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Settings, Lock, LogOut, ChevronRight, ChevronLeft, Camera, Edit3, Check } from 'lucide-vue-next'
+import { Settings, Lock, LogOut, ChevronRight, ChevronLeft, Camera, Check, Loader2 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import api, { apiErrorMessage } from '@/lib/api'
 import perfImg from '@/assets/perf.png'
 
 const auth = useAuthStore()
 const router = useRouter()
 
-// Controla visualização entre Perfil 1 (Visão Geral) e Perfil 2 (Edição)
 const isEditing = ref(false)
 
-// Modal de redefinir senha
 const showPasswordModal = ref(false)
 const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordSuccess = ref(false)
+const passwordError = ref<string | null>(null)
+const passwordLoading = ref(false)
 
-// Dados do formulário de edição
-const formData = ref({
-  fullName: auth.user?.name || 'Aline Rosa',
-  cpf: '123.456.789-00',
-  email: auth.user?.email || 'admin@email.com',
-  phone: '(61) 99123-4567',
-  crmv: 'CRMV-DF 4521',
-  specialty: 'Cardiologia Veterinária',
+const formData = reactive({
+  fullName: '',
+  cpf: '',
+  email: '',
+  phone: '',
+  crmv: '',
+  specialty: '',
 })
 
+const saving = ref(false)
+const saveError = ref<string | null>(null)
 const saveSuccessMessage = ref(false)
+
+const displayName = computed(() => auth.user?.name ?? '')
+const displaySpecialty = computed(() => auth.user?.specialty ?? '')
+
+function fillForm() {
+  const u = auth.user
+  formData.fullName = u?.name ?? ''
+  formData.cpf = u?.cpf ?? ''
+  formData.email = u?.email ?? ''
+  formData.phone = u?.phone ?? ''
+  formData.crmv = u?.crmv ?? ''
+  formData.specialty = u?.specialty ?? ''
+}
+
+function startEditing() {
+  fillForm()
+  saveError.value = null
+  isEditing.value = true
+}
+
+onMounted(() => {
+  fillForm()
+  auth.fetchProfile().then(fillForm).catch(() => undefined)
+})
 
 function handleLogout() {
   auth.logout()
   router.push({ name: 'login' })
 }
 
-function handleSaveProfile() {
-  saveSuccessMessage.value = true
-  setTimeout(() => {
-    saveSuccessMessage.value = false
-    isEditing.value = false
-  }, 1200)
+async function handleSaveProfile() {
+  saveError.value = null
+  if (!formData.fullName.trim()) {
+    saveError.value = 'Informe o nome completo.'
+    return
+  }
+  saving.value = true
+  try {
+    await auth.updateProfile({
+      name: formData.fullName.trim(),
+      cpf: formData.cpf.trim() || undefined,
+      phone: formData.phone.trim() || undefined,
+      crmv: formData.crmv.trim() || undefined,
+      specialty: formData.specialty.trim() || undefined,
+    })
+    saveSuccessMessage.value = true
+    setTimeout(() => {
+      saveSuccessMessage.value = false
+      isEditing.value = false
+    }, 1200)
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Não foi possível salvar o perfil.')
+  } finally {
+    saving.value = false
+  }
 }
 
-function handleResetPassword() {
-  if (newPassword.value && newPassword.value === confirmPassword.value) {
+function closePasswordModal() {
+  showPasswordModal.value = false
+  oldPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  passwordError.value = null
+}
+
+async function handleResetPassword() {
+  passwordError.value = null
+  if (!oldPassword.value) {
+    passwordError.value = 'Informe a senha atual.'
+    return
+  }
+  if (newPassword.value.length < 8) {
+    passwordError.value = 'A nova senha deve ter pelo menos 8 caracteres.'
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    passwordError.value = 'As senhas informadas não coincidem.'
+    return
+  }
+  passwordLoading.value = true
+  try {
+    await api.put('/users/me/password', {
+      currentPassword: oldPassword.value,
+      newPassword: newPassword.value,
+    })
     passwordSuccess.value = true
     setTimeout(() => {
       passwordSuccess.value = false
-      showPasswordModal.value = false
-      oldPassword.value = ''
-      newPassword.value = ''
-      confirmPassword.value = ''
+      closePasswordModal()
     }, 1500)
+  } catch (err) {
+    passwordError.value = apiErrorMessage(err, 'Não foi possível alterar a senha.')
+  } finally {
+    passwordLoading.value = false
   }
 }
 </script>
@@ -71,14 +143,14 @@ function handleResetPassword() {
           <div class="relative">
             <img
               :src="perfImg"
-              alt="Dra. Aline Rosa"
+              :alt="displayName"
               class="size-28 sm:size-32 rounded-full object-cover ring-4 ring-[#16273e] shadow-sm"
             />
             <button
               type="button"
               title="Alterar foto"
               class="absolute bottom-0 right-0 flex size-8 items-center justify-center rounded-full bg-[#0284c7] text-white ring-2 ring-white transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
-              @click="isEditing = true"
+              @click="startEditing"
             >
               <Camera class="size-4" />
             </button>
@@ -86,10 +158,10 @@ function handleResetPassword() {
 
           <!-- Nome e especialidade -->
           <h2 class="mt-3 text-lg font-bold text-[#0F2440]">
-            Dra. Aline Rosa
+            {{ displayName }}
           </h2>
-          <span class="mt-1 inline-flex items-center justify-center rounded-full bg-[#FFEDED] px-2.5 py-0.5 text-[10px] font-semibold text-brand-red">
-            Cardiologia Veterinária
+          <span v-if="displaySpecialty" class="mt-1 inline-flex items-center justify-center rounded-full bg-[#FFEDED] px-2.5 py-0.5 text-[10px] font-semibold text-brand-red">
+            {{ displaySpecialty }}
           </span>
 
           <!-- Opções de navegação do perfil -->
@@ -98,7 +170,7 @@ function handleResetPassword() {
             <button
               type="button"
               class="flex w-full items-center justify-between rounded-[16px] border border-slate-400/60 bg-white px-4 py-3 text-left transition-all hover:border-[#14253B] hover:bg-slate-50/80 hover:shadow-xs cursor-pointer"
-              @click="isEditing = true"
+              @click="startEditing"
             >
               <div class="flex items-center gap-3">
                 <div class="text-[#14253B]">
@@ -194,15 +266,15 @@ function handleResetPassword() {
           <div class="flex items-center gap-4 border-b border-slate-100 pb-5">
             <img
               :src="perfImg"
-              alt="Dra. Aline Rosa"
+              :alt="displayName"
               class="size-14 rounded-full object-cover ring-2 ring-slate-200 shadow-xs"
             />
             <div>
               <h2 class="text-lg font-bold text-[#0F2440]">
-                Dra. Aline Rosa
+                {{ displayName }}
               </h2>
-              <span class="mt-1 inline-flex items-center justify-center rounded-full bg-[#FFEDED] px-2.5 py-0.5 text-[10px] font-semibold text-brand-red">
-                Cardiologia Veterinária
+              <span v-if="displaySpecialty" class="mt-1 inline-flex items-center justify-center rounded-full bg-[#FFEDED] px-2.5 py-0.5 text-[10px] font-semibold text-brand-red">
+                {{ displaySpecialty }}
               </span>
             </div>
           </div>
@@ -214,6 +286,14 @@ function handleResetPassword() {
           >
             <Check class="size-4" />
             <span>Perfil atualizado com sucesso!</span>
+          </div>
+
+          <div
+            v-if="saveError"
+            role="alert"
+            class="rounded-xl border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
+          >
+            {{ saveError }}
           </div>
 
           <!-- Formulário de dados -->
@@ -244,7 +324,9 @@ function handleResetPassword() {
               <input
                 v-model="formData.email"
                 type="email"
-                class="w-full text-sm font-semibold text-[#14253B] bg-transparent outline-none pt-0.5"
+                readonly
+                title="O e-mail é o login e não pode ser alterado"
+                class="w-full text-sm font-semibold text-slate-500 bg-transparent outline-none pt-0.5 cursor-not-allowed"
               />
             </div>
 
@@ -301,9 +383,11 @@ function handleResetPassword() {
               </button>
               <button
                 type="button"
-                class="rounded-lg bg-brand-red px-6 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#8e1818] cursor-pointer shadow-xs"
+                class="inline-flex items-center gap-2 rounded-lg bg-brand-red px-6 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#8e1818] cursor-pointer shadow-xs disabled:opacity-60"
+                :disabled="saving"
                 @click="handleSaveProfile"
               >
+                <Loader2 v-if="saving" class="size-3.5 animate-spin" />
                 Salvar alterações
               </button>
             </div>
@@ -329,6 +413,14 @@ function handleResetPassword() {
 
         <div v-if="passwordSuccess" class="rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs font-semibold text-emerald-800">
           Senha alterada com sucesso!
+        </div>
+
+        <div
+          v-if="passwordError"
+          role="alert"
+          class="rounded-xl border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
+        >
+          {{ passwordError }}
         </div>
 
         <div class="space-y-3">
@@ -365,15 +457,17 @@ function handleResetPassword() {
           <button
             type="button"
             class="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-            @click="showPasswordModal = false"
+            @click="closePasswordModal"
           >
             Fechar
           </button>
           <button
             type="button"
-            class="rounded-lg bg-brand-red px-5 py-2 text-xs font-bold text-white hover:bg-[#8e1818] cursor-pointer shadow-xs"
+            class="inline-flex items-center gap-2 rounded-lg bg-brand-red px-5 py-2 text-xs font-bold text-white hover:bg-[#8e1818] cursor-pointer shadow-xs disabled:opacity-60"
+            :disabled="passwordLoading"
             @click="handleResetPassword"
           >
+            <Loader2 v-if="passwordLoading" class="size-3.5 animate-spin" />
             Confirmar
           </button>
         </div>
