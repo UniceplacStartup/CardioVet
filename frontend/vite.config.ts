@@ -14,9 +14,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Encaminha chamadas /api para o backend Spring Boot durante o desenvolvimento.
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.API_TARGET ?? 'http://localhost:8080',
         changeOrigin: true,
       },
     },
