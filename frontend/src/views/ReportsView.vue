@@ -1,45 +1,53 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import { Search, FileText, Download, Check, Loader2 } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { Search, FileText, Download, Check, Loader2, Pencil, X } from 'lucide-vue-next'
 import api from '@/lib/api'
+import { formatIsoDate } from '@/lib/utils'
 import type { DocumentSummary, Page } from '@/types'
 
 interface ReportItem {
   id: string
   patientName: string
   fileName?: string
+  reportModel?: string
   dateFormatted: string
-  documentType?: string
 }
+
+const route = useRoute()
+const router = useRouter()
 
 const reports = ref<ReportItem[]>([])
 const loading = ref(false)
+const loadError = ref(false)
 const search = ref('')
 const downloadingId = ref<string | null>(null)
 const downloadToast = ref(false)
 
+const patientId = computed(() => (route.query.patientId as string | undefined) || undefined)
+const patientFilterName = computed(() => (route.query.patientName as string | undefined) || '')
+
 async function loadFromApi() {
   loading.value = true
+  loadError.value = false
   try {
-    const { data } = await api.get<Page<DocumentSummary>>('/documents', { params: { size: 100 } })
-    if (data.content && data.content.length > 0) {
-      reports.value = data.content.map((doc) => ({
-        id: doc.id,
-        patientName: doc.patientName || doc.fileName || 'Laudo',
-        fileName: doc.fileName,
-        dateFormatted: new Date(doc.documentDate || doc.createdAt || Date.now()).toLocaleDateString('pt-BR', {
-          month: 'long',
-          year: 'numeric',
-          day: '2-digit',
-        }),
-      }))
-    } else {
-      reports.value = []
-    }
+    const { data } = await api.get<Page<DocumentSummary>>('/documents', {
+      params: { size: 100, patientId: patientId.value },
+    })
+    reports.value = (data.content ?? []).map((doc) => ({
+      id: doc.id,
+      patientName: doc.patientName || doc.fileName || 'Laudo',
+      fileName: doc.fileName,
+      reportModel: doc.reportModel,
+      dateFormatted: formatIsoDate(doc.documentDate || doc.createdAt, {
+        month: 'long',
+        year: 'numeric',
+        day: '2-digit',
+      }),
+    }))
   } catch {
-    // Se o backend estiver desconectado, mantém a lista vazia
     reports.value = []
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -51,9 +59,15 @@ const filtered = computed(() => {
   return reports.value.filter(
     (r) =>
       r.patientName.toLowerCase().includes(q) ||
-      r.dateFormatted.toLowerCase().includes(q),
+      r.dateFormatted.toLowerCase().includes(q) ||
+      (r.reportModel?.toLowerCase().includes(q) ?? false),
   )
 })
+
+function showAll() {
+  search.value = ''
+  if (patientId.value) router.replace({ name: 'reports' })
+}
 
 async function handleDownload(report: ReportItem) {
   downloadingId.value = report.id
@@ -76,9 +90,7 @@ async function handleDownload(report: ReportItem) {
   }
 }
 
-onMounted(() => {
-  loadFromApi()
-})
+watch(patientId, loadFromApi, { immediate: true })
 </script>
 
 <template>
@@ -118,9 +130,19 @@ onMounted(() => {
         <button
           type="button"
           class="rounded-lg bg-brand-red px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-[#8e1818] cursor-pointer shadow-xs"
-          @click="search = ''"
+          @click="showAll"
         >
           Ver todas
+        </button>
+      </div>
+
+      <div
+        v-if="patientId"
+        class="mb-4 inline-flex items-center gap-2 rounded-full bg-[#14253B] px-3 py-1 text-xs font-semibold text-white"
+      >
+        <span>Histórico de {{ patientFilterName || 'paciente' }}</span>
+        <button type="button" class="cursor-pointer hover:opacity-80" aria-label="Remover filtro" @click="showAll">
+          <X class="size-3.5" />
         </button>
       </div>
 
@@ -146,25 +168,34 @@ onMounted(() => {
                 {{ r.patientName }}
               </p>
               <p class="text-xs font-medium text-slate-600">
-                {{ r.dateFormatted }}
+                {{ r.dateFormatted }}<span v-if="r.reportModel"> • {{ r.reportModel }}</span>
               </p>
             </div>
           </div>
 
-          <!-- Ação Baixar com ícone de download -->
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-xs font-semibold text-[#14253B] transition-colors hover:text-brand-red cursor-pointer"
-            :disabled="downloadingId === r.id"
-            @click="handleDownload(r)"
-          >
-            <Download class="size-4 stroke-[2]" :class="downloadingId === r.id ? 'animate-bounce' : ''" />
-            <span>{{ downloadingId === r.id ? 'Baixando...' : 'Baixar' }}</span>
-          </button>
+          <div class="flex items-center gap-4">
+            <RouterLink
+              :to="{ name: 'edit-report', params: { id: r.id } }"
+              class="flex items-center gap-1.5 text-xs font-semibold text-[#14253B] transition-colors hover:text-brand-red"
+            >
+              <Pencil class="size-4" />
+              <span>Editar</span>
+            </RouterLink>
+            <button
+              type="button"
+              class="flex items-center gap-1.5 text-xs font-semibold text-[#14253B] transition-colors hover:text-brand-red cursor-pointer"
+              :disabled="downloadingId === r.id"
+              @click="handleDownload(r)"
+            >
+              <Download class="size-4 stroke-[2]" :class="downloadingId === r.id ? 'animate-bounce' : ''" />
+              <span>{{ downloadingId === r.id ? 'Baixando...' : 'Baixar' }}</span>
+            </button>
+          </div>
         </div>
 
         <div v-if="filtered.length === 0" class="py-14 text-center text-sm text-slate-500 space-y-3">
-          <p v-if="search">Nenhum relatório encontrado com "{{ search }}".</p>
+          <p v-if="loadError" class="font-medium text-red-700">Não foi possível carregar os laudos.</p>
+          <p v-else-if="search">Nenhum relatório encontrado com "{{ search }}".</p>
           <template v-else>
             <p class="font-medium text-slate-600">Nenhum laudo cadastrado ainda.</p>
             <div>

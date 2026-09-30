@@ -1,26 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, FileText, Loader2 } from 'lucide-vue-next'
 import api from '@/lib/api'
 import type { Page, Patient } from '@/types'
 
+const router = useRouter()
 const patients = ref<Patient[]>([])
+const loadError = ref(false)
 const loading = ref(false)
 const search = ref('')
 
 async function loadFromApi() {
   loading.value = true
+  loadError.value = false
   try {
     const { data } = await api.get<Page<Patient>>('/patients', {
       params: { size: 100 },
     })
-    if (data.content && data.content.length > 0) {
-      patients.value = data.content
-    } else {
-      patients.value = []
-    }
+    patients.value = data.content ?? []
   } catch {
     patients.value = []
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -36,6 +37,10 @@ const filtered = computed(() => {
       (p.tutorName && p.tutorName.toLowerCase().includes(q)),
   )
 })
+
+function openHistory(patient: Patient) {
+  router.push({ name: 'reports', query: { patientId: patient.id, patientName: patient.name } })
+}
 
 onMounted(() => {
   loadFromApi()
@@ -90,7 +95,7 @@ onMounted(() => {
               </p>
               <p class="text-xs font-medium text-slate-600">
                 {{ p.breed || p.species }}
-                <span v-if="p.tutorName"> • {{ p.tutorLabel || (p.tutorName.endsWith('a') ? 'Tutora' : 'Tutor') }}: {{ p.tutorName }}</span>
+                <span v-if="p.tutorName"> • Tutor(a): {{ p.tutorName }}</span>
               </p>
             </div>
           </div>
@@ -99,14 +104,19 @@ onMounted(() => {
           <button
             type="button"
             class="text-xs font-semibold text-[#14253B] transition-colors hover:text-brand-red cursor-pointer"
+            @click="openHistory(p)"
           >
             Ver histórico
           </button>
         </div>
 
         <div v-if="filtered.length === 0" class="py-14 text-center text-sm text-slate-500">
-          <p v-if="search">Nenhum paciente encontrado com "{{ search }}".</p>
-          <p v-else class="font-medium text-slate-600">Nenhum paciente cadastrado ainda.</p>
+          <p v-if="loadError" class="font-medium text-red-700">Não foi possível carregar os pacientes.</p>
+          <p v-else-if="search">Nenhum paciente encontrado com "{{ search }}".</p>
+          <template v-else>
+            <p class="font-medium text-slate-600">Nenhum paciente cadastrado ainda.</p>
+            <p class="mt-1 text-xs">Os pacientes são cadastrados ao salvar um laudo.</p>
+          </template>
         </div>
       </div>
     </div>

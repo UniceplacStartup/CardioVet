@@ -1,40 +1,26 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  ChevronLeft,
-  Check,
-  AlertCircle,
-  Loader2,
-  Upload,
-} from 'lucide-vue-next'
-import api from '@/lib/api'
-import type { DocumentDetail } from '@/types'
+import { ChevronLeft, Check, AlertCircle, Loader2, Upload } from 'lucide-vue-next'
+import api, { apiErrorMessage } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
+import { parseClinicalText, parseWeight, type ReportFormData } from '@/lib/reportParser'
+import type { DocumentDetail, DocumentField, DocumentImage, ReportRequest } from '@/types'
 import ReportModelSelect from '@/components/ReportModelSelect.vue'
 import ImageAttachmentBox, { type ExamImage } from '@/components/ImageAttachmentBox.vue'
 
-interface ReportFormData {
-  model: string
-  species: string
-  age: string
-  sex: string
-  examDate: string
-  patientName: string
-  tutorCpf: string
-  breed: string
-  tutorName: string
-  issueDate: string
-  weightKg: string
-  veterinarian: string
-  findings: string
-  conclusion: string
-}
-
 type ToastType = 'success' | 'warning'
 
-const router = useRouter()
+const props = defineProps<{ id?: string }>()
 
+const router = useRouter()
+const auth = useAuthStore()
+
+const documentId = ref<string | null>(null)
 const uploading = ref(false)
+const loadingDocument = ref(false)
+const saving = ref(false)
+const imagesBusy = ref(false)
 const isDraggingPdf = ref(false)
 const pdfInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<ExamImage[]>([])
@@ -42,7 +28,7 @@ const attachedImages = ref<ExamImage[]>([])
 const toastMessage = ref('')
 const toastType = ref<ToastType>('success')
 
-const form = reactive<ReportFormData>({
+const emptyForm = (): ReportFormData => ({
   model: 'Ecocardiograma Transtorácico',
   species: '',
   age: '',
@@ -54,10 +40,52 @@ const form = reactive<ReportFormData>({
   tutorName: '',
   issueDate: '',
   weightKg: '',
-  veterinarian: '',
+  veterinarian: auth.user?.name ?? '',
   findings: '',
   conclusion: '',
 })
+
+const form = reactive<ReportFormData>(emptyForm())
+
+const extractedFields = ref<DocumentField[]>([])
+
+const MEASUREMENT_GROUPS = [
+  { category: 'MODO_M', title: 'Modo-M / 2D' },
+  { category: 'CALCULO', title: 'Cálculos' },
+  { category: 'DOPPLER', title: 'Doppler' },
+] as const
+
+const PATIENT_EXTRA_KEYS = ['heartRate', 'rhythm', 'requester']
+
+const measurementGroups = computed(() =>
+  MEASUREMENT_GROUPS.map((g) => ({
+    ...g,
+    fields: extractedFields.value.filter((f) => f.category === g.category),
+  })).filter((g) => g.fields.length > 0),
+)
+
+const patientExtras = computed(() =>
+  extractedFields.value.filter((f) => PATIENT_EXTRA_KEYS.includes(f.fieldKey)),
+)
+
+const SPECIES_ALIASES: Record<string, string> = {
+  fel: 'Felina',
+  felino: 'Felina',
+  can: 'Canina',
+  canino: 'Canina',
+}
+
+function normalizeSpecies(value: string): string {
+  return SPECIES_ALIASES[value.trim().toLowerCase()] ?? value
+}
+
+function formatFieldValue(field: DocumentField): string {
+  return [field.value, field.unit].filter(Boolean).join(' ')
+}
+
+const signature = computed(() =>
+  [form.veterinarian || auth.user?.name, auth.user?.crmv].filter(Boolean).join(' — '),
+)
 
 function showNotification(msg: string, type: ToastType = 'success') {
   toastMessage.value = msg
@@ -79,210 +107,90 @@ function triggerPdfPick() {
   pdfInputRef.value?.click()
 }
 
-function parseClinicalText(text: string): Partial<ReportFormData> {
-  const result: Partial<ReportFormData> = {}
-
-  const findMatch = (regex: RegExp): string => {
-    const match = text.match(regex)
-    return match && match[1] ? match[1].trim() : ''
-  }
-
-  if (/doppler/i.test(text)) {
-    result.model = 'Ecocardiograma com Doppler'
-  } else if (/eletrocardiograma|ecg/i.test(text)) {
-    result.model = 'Eletrocardiograma (ECG)'
-  } else if (/holter/i.test(text)) {
-    result.model = 'Holter 24h'
-  } else if (/pr[ée]-operat[óo]ri/i.test(text)) {
-    result.model = 'Avaliação Pré-operatória'
-  } else if (/ecocardiograma/i.test(text)) {
-    result.model = 'Ecocardiograma Transtorácico'
-  }
-
-  const patient = findMatch(/(?:paciente|nome(?:\s+do\s+animal|\s+do\s+paciente)?|animal)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (patient) result.patientName = patient
-
-  const speciesMatch = findMatch(/(?:esp[ée]cie)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (speciesMatch) {
-    result.species = speciesMatch
-  } else if (/canin[ao]|c[ãa]o/i.test(text)) {
-    result.species = 'Canina'
-  } else if (/felin[ao]|gato/i.test(text)) {
-    result.species = 'Felina'
-  }
-
-  const breed = findMatch(/(?:ra[çc]a)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (breed) result.breed = breed
-
-  const age = findMatch(/(?:idade)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (age) result.age = age
-
-  const sexMatch = findMatch(/(?:sexo)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (sexMatch) {
-    if (/^m(?:acho)?/i.test(sexMatch)) result.sex = 'Macho'
-    else if (/^f(?:[êe]mea)?/i.test(sexMatch)) result.sex = 'Fêmea'
-    else result.sex = sexMatch
-  } else if (/\bmacho\b/i.test(text)) {
-    result.sex = 'Macho'
-  } else if (/\bf[êe]mea\b/i.test(text)) {
-    result.sex = 'Fêmea'
-  }
-
-  const weight = findMatch(/(?:peso(?:\s+do\s+paciente)?)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (weight) result.weightKg = weight
-
-  const tutor = findMatch(/(?:tutor(?:a)?|propriet[áa]rio(?:a)?|respons[áa]vel)\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (tutor) result.tutorName = tutor
-
-  const cpf = findMatch(/(?:cpf(?:\s+do\s+tutor)?)\s*[:\-]\s*([\d\.\-]+)/i)
-  if (cpf) {
-    result.tutorCpf = cpf
-  } else {
-    const rawCpf = text.match(/\b\d{3}\.\d{3}\.\d{3}\-\d{2}\b/)
-    if (rawCpf) result.tutorCpf = rawCpf[0]
-  }
-
-  const vet = findMatch(/(?:veterin[áa]ri[oa](?:\s+respons[áa]vel)?|m[ée]dic[oa]\s+veterin[áa]ri[oa])\s*[:\-]\s*([^\n\r,;]+)/i)
-  if (vet) {
-    result.veterinarian = vet
-  } else {
-    const drMatch = text.match(/\b(?:Dr[a]?\.\s*[A-ZÀ-Úa-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú]+)+)/)
-    if (drMatch) result.veterinarian = drMatch[0]
-  }
-
-  const examDate = findMatch(/(?:data\s+do\s+exame|data\s+exame)\s*[:\-]\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4})/i)
-  if (examDate) {
-    result.examDate = examDate.replace(/[\-\.]/g, '/')
-  } else {
-    const dates = text.match(/\b\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}\b/g)
-    if (dates && dates.length > 0 && dates[0]) {
-      result.examDate = dates[0].replace(/[\-\.]/g, '/')
-    }
-  }
-
-  const issueDate = findMatch(/(?:data\s+de\s+emiss[ãa]o|data\s+emiss[ãa]o|emitido\s+em)\s*[:\-]\s*(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4})/i)
-  if (issueDate) {
-    result.issueDate = issueDate.replace(/[\-\.]/g, '/')
-  } else {
-    const dates = text.match(/\b\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}\b/g)
-    if (dates && dates.length > 1 && dates[1]) {
-      result.issueDate = dates[1].replace(/[\-\.]/g, '/')
-    }
-  }
-
-  const findingsMatch = text.match(/(?:ACHADOS|DESCRIÇÃO|AVALIAÇÃO)\s*[:\-]?\s*([\s\S]*?)(?=(?:CONCLUSÃO|DIAGNÓSTICO|OBSERVAÇÕES|\n[A-Z\s]{4,}:|$))/i)
-  if (findingsMatch && findingsMatch[1]) {
-    result.findings = findingsMatch[1].trim()
-  }
-
-  const conclusionMatch = text.match(/(?:CONCLUSÃO|DIAGNÓSTICO|IMPRESSÃO DIAGNÓSTICA)\s*[:\-]?\s*([\s\S]*?)(?=(?:Este laudo|Assinado|Dra\.|Dr\.|CRMV|$))/i)
-  if (conclusionMatch && conclusionMatch[1]) {
-    result.conclusion = conclusionMatch[1].trim()
-  }
-
-  return result
+function fieldValue(detail: DocumentDetail, key: string): string {
+  return detail.fields.find((f) => f.fieldKey === key)?.value ?? ''
 }
 
-async function extractTextFromFile(file: File): Promise<string> {
-  if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
-    return await file.text()
+function fillFromDetail(detail: DocumentDetail) {
+  const parsed = detail.extractedText ? parseClinicalText(detail.extractedText) : {}
+  extractedFields.value = detail.fields ?? []
+  Object.assign(form, emptyForm())
+  form.model = detail.reportModel || parsed.model || form.model
+  form.patientName = detail.patientName || fieldValue(detail, 'animalName') || parsed.patientName || ''
+  form.species = detail.species || normalizeSpecies(fieldValue(detail, 'species')) || parsed.species || ''
+  form.breed = detail.breed || fieldValue(detail, 'breed') || parsed.breed || ''
+  form.sex = detail.sex || fieldValue(detail, 'sex') || parsed.sex || ''
+  form.age = detail.patientAge || fieldValue(detail, 'age') || parsed.age || ''
+  form.weightKg =
+    detail.weightKg != null ? String(detail.weightKg) : fieldValue(detail, 'weight') || parsed.weightKg || ''
+  form.tutorName = detail.tutorName || fieldValue(detail, 'tutor') || parsed.tutorName || ''
+  form.tutorCpf = detail.tutorCpf || parsed.tutorCpf || ''
+  form.examDate = detail.examDate || parsed.examDate || ''
+  form.issueDate = detail.documentDate || parsed.issueDate || ''
+  form.veterinarian = detail.veterinarianName || auth.user?.name || ''
+  form.findings = detail.findings || parsed.findings || ''
+  form.conclusion = detail.conclusion || parsed.conclusion || ''
+}
+
+function revokePreviews() {
+  for (const image of attachedImages.value) {
+    if (image.url) URL.revokeObjectURL(image.url)
   }
+}
 
-  const buffer = await file.arrayBuffer()
-  const bytes = new Uint8Array(buffer)
-  const decoder = new TextDecoder('latin1')
-  const raw = decoder.decode(bytes)
-
-  const textSnippets: string[] = []
-  const tjMatches = raw.matchAll(/\(([^()]+)\)\s*Tj/g)
-  for (const m of tjMatches) {
-    if (m[1]) textSnippets.push(m[1])
+async function loadPreview(docId: string, image: DocumentImage): Promise<ExamImage> {
+  try {
+    const { data } = await api.get(`/documents/${docId}/images/${image.id}`, { responseType: 'blob' })
+    return { id: image.id, fileName: image.fileName, url: URL.createObjectURL(data as Blob) }
+  } catch {
+    return { id: image.id, fileName: image.fileName }
   }
+}
 
-  const arrayTjMatches = raw.matchAll(/\[(.*?)\]\s*TJ/g)
-  for (const m of arrayTjMatches) {
-    if (m[1]) {
-      const cleaned = m[1].replace(/\(([^()]+)\)/g, '$1 ')
-      textSnippets.push(cleaned)
-    }
+async function setImages(docId: string, images: DocumentImage[]) {
+  revokePreviews()
+  attachedImages.value = images.map((i) => ({ id: i.id, fileName: i.fileName }))
+  attachedImages.value = await Promise.all(images.map((i) => loadPreview(docId, i)))
+}
+
+async function loadDocument(id: string) {
+  loadingDocument.value = true
+  try {
+    const { data } = await api.get<DocumentDetail>(`/documents/${id}`)
+    documentId.value = data.id
+    fillFromDetail(data)
+    await setImages(data.id, data.images ?? [])
+  } catch (err) {
+    showNotification(apiErrorMessage(err, 'Não foi possível carregar o laudo.'), 'warning')
+  } finally {
+    loadingDocument.value = false
   }
-
-  if (textSnippets.length > 5) {
-    return textSnippets.join(' ')
-  }
-
-  return raw.replace(/[^\x20-\x7E\xA0-\xFF\n\r]/g, ' ')
 }
 
 async function handlePdfUpload(file: File) {
   if (!file) return
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+    showNotification('Envie um arquivo PDF.', 'warning')
+    return
+  }
   uploading.value = true
   try {
-    let extractedText = ''
-    let serverData: Partial<DocumentDetail> | null = null
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await api.post<DocumentDetail>('/documents', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      serverData = res.data
-      if (serverData?.extractedText) {
-        extractedText = serverData.extractedText
-      }
-    } catch {
-      extractedText = await extractTextFromFile(file)
-    }
-
-    if (!extractedText) {
-      extractedText = await extractTextFromFile(file)
-    }
-
-    const parsed = parseClinicalText(extractedText)
-
-    if (serverData?.patientName) {
-      form.patientName = serverData.patientName
-    } else if (parsed.patientName) {
-      form.patientName = parsed.patientName
+    const formData = new FormData()
+    formData.append('file', file)
+    const { data } = await api.post<DocumentDetail>('/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    documentId.value = data.id
+    fillFromDetail(data)
+    await setImages(data.id, data.images ?? [])
+    router.replace({ name: 'edit-report', params: { id: data.id } })
+    if (data.status === 'ERRO') {
+      showNotification('Laudo salvo, mas não foi possível ler o conteúdo do PDF.', 'warning')
     } else {
-      form.patientName = file.name.replace(/\.[^/.]+$/, '').replace(/[_\-]+/g, ' ')
+      showNotification('Campos preenchidos a partir da leitura do laudo!', 'success')
     }
-
-    if (parsed.model) form.model = parsed.model
-    if (parsed.species) form.species = parsed.species
-    if (parsed.age) form.age = parsed.age
-    if (parsed.sex) form.sex = parsed.sex
-    if (parsed.examDate) form.examDate = parsed.examDate
-    if (parsed.tutorCpf) form.tutorCpf = parsed.tutorCpf
-    if (parsed.breed) form.breed = parsed.breed
-    if (parsed.tutorName) form.tutorName = parsed.tutorName
-    if (parsed.issueDate) form.issueDate = parsed.issueDate
-    if (parsed.weightKg) form.weightKg = parsed.weightKg
-    if (parsed.veterinarian) form.veterinarian = parsed.veterinarian
-    if (parsed.findings) form.findings = parsed.findings
-    if (parsed.conclusion) form.conclusion = parsed.conclusion
-
-    if (serverData?.fields && Array.isArray(serverData.fields)) {
-      for (const f of serverData.fields) {
-        const k = f.fieldKey.toLowerCase()
-        const v = f.value || ''
-        if (!v) continue
-        if (k.includes('species') || k.includes('especie')) form.species = v
-        else if (k.includes('breed') || k.includes('raca')) form.breed = v
-        else if (k.includes('weight') || k.includes('peso')) form.weightKg = v
-        else if (k.includes('tutor')) form.tutorName = v
-        else if (k.includes('cpf')) form.tutorCpf = v
-        else if (k.includes('sex')) form.sex = v
-        else if (k.includes('age') || k.includes('idade')) form.age = v
-        else if (k.includes('findings') || k.includes('achados')) form.findings = v
-        else if (k.includes('conclusion') || k.includes('conclusao')) form.conclusion = v
-      }
-    }
-
-    showNotification('Campos preenchidos a partir da leitura do laudo!', 'success')
-  } catch {
-    showNotification('Não foi possível ler o arquivo enviado.', 'warning')
+  } catch (err) {
+    showNotification(apiErrorMessage(err, 'Não foi possível enviar o arquivo.'), 'warning')
   } finally {
     uploading.value = false
   }
@@ -305,25 +213,104 @@ function onPdfDrop(e: DragEvent) {
   }
 }
 
+async function handleAddImages(files: File[]) {
+  if (!documentId.value) return
+  imagesBusy.value = true
+  try {
+    const formData = new FormData()
+    for (const file of files) formData.append('files', file)
+    const { data } = await api.post<DocumentImage[]>(`/documents/${documentId.value}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    const docId = documentId.value
+    const previews = await Promise.all(data.map((i) => loadPreview(docId, i)))
+    attachedImages.value = [...attachedImages.value, ...previews]
+  } catch (err) {
+    showNotification(apiErrorMessage(err, 'Não foi possível anexar as imagens.'), 'warning')
+  } finally {
+    imagesBusy.value = false
+  }
+}
+
+async function handleRemoveImage(image: ExamImage) {
+  if (!documentId.value) return
+  imagesBusy.value = true
+  try {
+    await api.delete(`/documents/${documentId.value}/images/${image.id}`)
+    if (image.url) URL.revokeObjectURL(image.url)
+    attachedImages.value = attachedImages.value.filter((i) => i.id !== image.id)
+  } catch (err) {
+    showNotification(apiErrorMessage(err, 'Não foi possível remover a imagem.'), 'warning')
+  } finally {
+    imagesBusy.value = false
+  }
+}
+
+function buildRequest(): ReportRequest {
+  return {
+    reportModel: form.model || undefined,
+    patientName: form.patientName.trim(),
+    species: form.species.trim(),
+    breed: form.breed.trim() || undefined,
+    sex: form.sex.trim() || undefined,
+    patientAge: form.age.trim() || undefined,
+    weightKg: parseWeight(form.weightKg),
+    tutorName: form.tutorName.trim(),
+    tutorCpf: form.tutorCpf.trim() || undefined,
+    examDate: form.examDate || undefined,
+    issueDate: form.issueDate || undefined,
+    veterinarianName: form.veterinarian.trim() || undefined,
+    findings: form.findings.trim() || undefined,
+    conclusion: form.conclusion.trim() || undefined,
+  }
+}
+
+async function handleSave() {
+  if (!documentId.value) {
+    showNotification('Importe o laudo em PDF antes de salvar.', 'warning')
+    return
+  }
+  const missing = [
+    [form.patientName, 'nome do paciente'],
+    [form.species, 'espécie'],
+    [form.tutorName, 'tutor responsável'],
+  ].filter(([value]) => !value?.trim())
+  if (missing.length > 0) {
+    showNotification(`Preencha: ${missing.map(([, label]) => label).join(', ')}.`, 'warning')
+    return
+  }
+  saving.value = true
+  try {
+    const { data } = await api.put<DocumentDetail>(`/documents/${documentId.value}/report`, buildRequest())
+    fillFromDetail(data)
+    showNotification('Alterações salvas com sucesso!', 'success')
+  } catch (err) {
+    showNotification(apiErrorMessage(err, 'Não foi possível salvar o laudo.'), 'warning')
+  } finally {
+    saving.value = false
+  }
+}
+
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return y && m && d ? `${d}/${m}/${y}` : iso
+}
+
 function buildFormattedReportText(data: ReportFormData): string {
   const modelUpper = (data.model || 'ECOCARDIOGRAMA TRANSTORÁCICO').toUpperCase()
   return `${modelUpper}
 
 Paciente: ${data.patientName || 'Não informado'}, ${data.species || 'Não informado'}, ${data.breed || 'Não informado'}, ${data.sex || 'Não informado'}, ${data.age || 'Não informado'}, ${data.weightKg || 'Não informado'}
 Tutor: ${data.tutorName || 'Não informado'}${data.tutorCpf ? ` (CPF: ${data.tutorCpf})` : ''}
-Data do exame: ${data.examDate || 'Não informado'}
-Data de emissão: ${data.issueDate || 'Não informado'}
-Veterinário responsável: ${data.veterinarian || 'Dra. Aline Rosa'}
+Data do exame: ${data.examDate ? formatDate(data.examDate) : 'Não informado'}
+Data de emissão: ${data.issueDate ? formatDate(data.issueDate) : 'Não informado'}
+Veterinário responsável: ${signature.value || 'Não informado'}
 
 ACHADOS:
 ${data.findings || 'Nenhum achado registrado.'}
 
 CONCLUSÃO:
 ${data.conclusion || 'Nenhuma conclusão registrada.'}`
-}
-
-function handleSave() {
-  showNotification('Alterações salvas com sucesso!', 'success')
 }
 
 function handleDownload() {
@@ -337,6 +324,24 @@ function handleDownload() {
   URL.revokeObjectURL(url)
   showNotification('Download do laudo concluído com sucesso!', 'success')
 }
+
+watch(
+  () => props.id,
+  (id) => {
+    if (id && id !== documentId.value) {
+      loadDocument(id)
+    } else if (!id) {
+      documentId.value = null
+      revokePreviews()
+      attachedImages.value = []
+      Object.assign(form, emptyForm())
+      extractedFields.value = []
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(revokePreviews)
 </script>
 
 <template>
@@ -349,7 +354,7 @@ function handleDownload() {
     <input
       ref="pdfInputRef"
       type="file"
-      accept="application/pdf,.pdf,text/plain,.txt"
+      accept="application/pdf,.pdf"
       class="hidden"
       @change="onPdfSelected"
     />
@@ -394,16 +399,20 @@ function handleDownload() {
         >
           <Loader2 v-if="uploading" class="size-4 animate-spin text-white" />
           <Upload v-else class="size-4 text-white" />
-          <span>{{ uploading ? 'Processando laudo...' : 'Importar Laudo (PDF)' }}</span>
+          <span>{{ uploading ? 'Processando laudo...' : documentId ? 'Importar outro laudo (PDF)' : 'Importar Laudo (PDF)' }}</span>
         </button>
       </div>
 
       <div>
         <h1 class="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-          Editar laudo
+          {{ documentId ? 'Editar laudo' : 'Novo laudo' }}
         </h1>
         <p class="mt-1.5 text-xs sm:text-sm font-semibold text-slate-200">
-          Os campos abaixo foram identificados automaticamente a partir da leitura do laudo enviado.
+          <template v-if="loadingDocument">Carregando laudo...</template>
+          <template v-else-if="documentId">
+            Os campos abaixo foram identificados automaticamente a partir da leitura do laudo enviado.
+          </template>
+          <template v-else>Importe o laudo em PDF para preencher os campos automaticamente.</template>
         </p>
       </div>
     </div>
@@ -456,7 +465,7 @@ function handleDownload() {
           </label>
           <input
             v-model="form.examDate"
-            type="text"
+            type="date"
             class="h-10 w-full rounded-[10px] border border-slate-500/80 bg-[#CCD2D8] px-3 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-[#14253B] focus:ring-1 focus:ring-[#14253B]"
           />
         </div>
@@ -511,7 +520,7 @@ function handleDownload() {
           </label>
           <input
             v-model="form.issueDate"
-            type="text"
+            type="date"
             class="h-10 w-full rounded-[10px] border border-slate-500/80 bg-[#CCD2D8] px-3 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-[#14253B] focus:ring-1 focus:ring-[#14253B]"
           />
         </div>
@@ -523,6 +532,7 @@ function handleDownload() {
           <input
             v-model="form.weightKg"
             type="text"
+            inputmode="decimal"
             class="h-10 w-full rounded-[10px] border border-slate-500/80 bg-[#CCD2D8] px-3 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-[#14253B] focus:ring-1 focus:ring-[#14253B]"
           />
         </div>
@@ -561,13 +571,57 @@ function handleDownload() {
         </div>
       </div>
 
+      <section v-if="measurementGroups.length || patientExtras.length" class="mt-6 space-y-3">
+        <div class="flex items-baseline justify-between gap-2">
+          <h2 class="text-sm font-bold text-[#14253B]">Medidas extraídas do laudo</h2>
+          <span class="text-[11px] text-slate-500">{{ extractedFields.length }} campos reconhecidos</span>
+        </div>
+
+        <dl v-if="patientExtras.length" class="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+          <div v-for="f in patientExtras" :key="f.fieldKey" class="flex gap-1.5">
+            <dt class="font-semibold text-slate-600">{{ f.label }}:</dt>
+            <dd class="font-bold text-[#14253B]">{{ formatFieldValue(f) }}</dd>
+          </div>
+        </dl>
+
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div
+            v-for="group in measurementGroups"
+            :key="group.category"
+            class="rounded-[10px] border border-slate-300 bg-[#F1F3F6]"
+          >
+            <h3 class="border-b border-slate-300 px-3 py-2 text-[11px] font-bold tracking-wider text-[#14253B] uppercase">
+              {{ group.title }}
+            </h3>
+            <dl class="divide-y divide-slate-200">
+              <div
+                v-for="f in group.fields"
+                :key="f.fieldKey"
+                class="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
+              >
+                <dt class="text-slate-600">
+                  {{ f.label }} <span class="text-[10px] text-slate-400">({{ f.fieldKey }})</span>
+                </dt>
+                <dd class="shrink-0 font-bold text-[#14253B] tabular-nums">{{ formatFieldValue(f) }}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
       <div class="mt-6">
-        <ImageAttachmentBox v-model="attachedImages" />
+        <ImageAttachmentBox
+          :images="attachedImages"
+          :disabled="!documentId"
+          :busy="imagesBusy"
+          @add="handleAddImages"
+          @remove="handleRemoveImage"
+        />
       </div>
 
       <div class="mt-5 space-y-1 text-[11px] leading-relaxed text-slate-500 select-text">
-        <p>
-          Este laudo será emitido e assinado por Dra. Aline Rosa — CRMV-DF 4521 — Clínica Veterinária José da Silva.
+        <p v-if="signature">
+          Este laudo será emitido e assinado por {{ signature }}.
         </p>
         <p class="text-slate-400">
           Campos identificados automaticamente a partir da leitura do laudo enviado. Revise e edite o que for necessário antes de salvar.
@@ -578,9 +632,11 @@ function handleDownload() {
     <div class="flex flex-wrap items-center justify-center gap-6 pt-3">
       <button
         type="button"
-        class="h-12 min-w-[220px] rounded-xl bg-brand-red px-8 text-base font-semibold text-white shadow-lg transition-all hover:bg-[#8F1818] active:scale-[0.99] cursor-pointer"
+        class="inline-flex h-12 min-w-[220px] items-center justify-center gap-2 rounded-xl bg-brand-red px-8 text-base font-semibold text-white shadow-lg transition-all hover:bg-[#8F1818] active:scale-[0.99] cursor-pointer disabled:opacity-60"
+        :disabled="saving || uploading || loadingDocument"
         @click="handleSave"
       >
+        <Loader2 v-if="saving" class="size-5 animate-spin" />
         Salvar Alterações
       </button>
       <button
